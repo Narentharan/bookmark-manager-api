@@ -29,19 +29,49 @@ class BookmarkService
         return $this->bookmarkRepo->create($data);
     }
 
-    public function update($id, $data)
+    public function updateBookmark($id, array $data)
     {
-        return $this->bookmarkRepo->update($id, $data);
+        return $this->bookmarkRepo->updateBookmark($id, $data);
     }
 
-    public function delete($id)
+    public function deleteBookmark($id)
     {
-        return $this->bookmarkRepo->delete($id);
+        return $this->bookmarkRepo->deleteBookmark($id);
     }
 
-    public function search($query = null, $category = null)
+    public function searchBookmarks(string $query)
     {
-        return $this->bookmarkRepo->search($query, $category);
+        return $this->bookmarkRepo->searchBookmarks($query);
+    }
+
+    public function shareBookmark($bookmarkId, $email)
+    {
+        return $this->bookmarkRepo->shareBookmark($bookmarkId, $email);
+    }
+
+    public function generatePublicLink($bookmarkId)
+    {
+        return $this->bookmarkRepo->generatePublicLink($bookmarkId);
+    }
+
+    public function getPublicBookmark($token)
+    {
+        return $this->bookmarkRepo->getPublicBookmark($token);
+    }
+
+    public function getUserBookmarksPaginated($perPage = 10)
+    {
+        return $this->bookmarkRepo->getUserBookmarksPaginated($perPage);
+    }
+
+    public function getAllBookmarksPaginated($perPage = 10)
+    {
+        return $this->bookmarkRepo->getAllBookmarksPaginated($perPage);
+    }
+
+    public function createBookmark(array $data)
+    {
+    return $this->bookmarkRepo->createBookmark($data);
     }
 
 }

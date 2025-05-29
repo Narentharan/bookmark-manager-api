@@ -10,41 +10,51 @@ use App\Models\Bookmark;
 use App\Models\SharedBookmark;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use App\Traits\ApiResponseTrait;
+use App\Http\Resources\BookmarkResource;
+use Illuminate\Http\JsonResponse;
 
 
 class BookmarkController extends Controller
 {
     protected $bookmarkService;
+    use ApiResponseTrait;
 
     public function __construct(BookmarkService $bookmarkService)
     {
         $this->bookmarkService = $bookmarkService;
     }
 
-    public function index()
+    public function index(Request $request): JsonResponse
     {
         try {
-            $bookmarks = $this->bookmarkService->getAll();
-            return response()->json(['status' => 'success', 'data' => $bookmarks], 200);
+            $perPage = $request->get('per_page', 10); 
+
+            $bookmarks = $this->bookmarkService->getUserBookmarksPaginated($perPage);
+
+            return $this->success(BookmarkResource::collection($bookmarks), 'Bookmarks fetched successfully');
         } catch (\Exception $e) {
-            return response()->json(['status' => 'fail', 'message' => $e->getMessage()], 500);
+            //return $this->error($e->getMessage());
+            return $this->error('Something went wrong. Please try again later.');
         }
     }
 
-    public function show($id)
+    public function show($id): JsonResponse
     {
         try {
             $bookmark = $this->bookmarkService->getById($id);
+
             if (!$bookmark) {
-                return response()->json(['status' => 'fail', 'message' => 'Bookmark not found'], 404);
+                return $this->fail('Bookmark not found', 404);
             }
-            return response()->json(['status' => 'success', 'data' => $bookmark], 200);
+
+            return $this->success(new BookmarkResource($bookmark), 'Bookmark fetched successfully');
         } catch (\Exception $e) {
-            return response()->json(['status' => 'fail', 'message' => $e->getMessage()], 500);
+            return $this->error('Something went wrong. Please try again later.');
         }
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'title' => 'required|string',
@@ -55,136 +65,124 @@ class BookmarkController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['status' => 'fail', 'errors' => $validator->errors()], 422);
+            return $this->fail('Validation failed', 422, $validator->errors());
         }
 
         try {
-            $data = $request->all();
+            $data = $request->only(['title', 'url', 'category', 'tags']);
 
-            if (isset($data['tags']) && is_array($data['tags'])) {
-                $data['tags'] = implode(',', $data['tags']);
-            }
+            $bookmark = $this->bookmarkService->createBookmark($data);
 
-            $bookmark = $this->bookmarkService->create($data);
-            return response()->json(['status' => 'success', 'data' => $bookmark], 201);
+            return $this->success(new BookmarkResource($bookmark), 'Bookmark created successfully', 201);
         } catch (\Exception $e) {
-            return response()->json(['status' => 'fail', 'message' => $e->getMessage()], 500);
+            return $this->error('Something went wrong. Please try again later.');
         }
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, $id): JsonResponse
     {
+        $validator = Validator::make($request->all(), [
+            'title' => 'required|string',
+            'url' => 'required|url',
+            'tags' => 'nullable|array',
+            'tags.*' => 'string',
+            'category' => 'nullable|string'
+        ]);
+
+        if ($validator->fails()) {
+            return $this->fail('Validation failed', 422, $validator->errors());
+        }
+
         try {
-            $bookmark = $this->bookmarkService->update($id, $request->all());
+            $data = $request->only(['title', 'url', 'category', 'tags']);
+
+            $bookmark = $this->bookmarkService->updateBookmark($id, $data);
 
             if (!$bookmark) {
-                return response()->json(['status' => 'fail', 'message' => 'Bookmark not found or not authorized'], 404);
+                return $this->fail('Bookmark not found or not authorized', 404);
             }
 
-            return response()->json(['status' => 'success', 'data' => $bookmark], 200);
+            return $this->success(new BookmarkResource($bookmark), 'Bookmark updated successfully');
         } catch (\Exception $e) {
-            return response()->json(['status' => 'fail', 'message' => $e->getMessage()], 500);
+            return $this->error('Something went wrong. Please try again later.');
         }
     }
 
-    public function destroy($id)
+    public function destroy($id): JsonResponse
     {
         try {
-            $deleted = $this->bookmarkService->delete($id);
+            $deleted = $this->bookmarkService->deleteBookmark($id);
 
             if (!$deleted) {
-                return response()->json(['status' => 'fail', 'message' => 'Bookmark not found or not authorized'], 404);
+                return $this->fail('Bookmark not found or not authorized to delete', 404);
             }
 
-            return response()->json(['status' => 'success', 'message' => 'Bookmark deleted'], 200);
+            return $this->success(null, 'Bookmark deleted successfully');
         } catch (\Exception $e) {
-            return response()->json(['status' => 'fail', 'message' => $e->getMessage()], 500);
+            return $this->error('Something went wrong. Please try again later.');
         }
     }
 
-        public function search(Request $request)
+    public function search(Request $request): JsonResponse
     {
-        $query = $request->input('query');
-        $category = $request->input('category');
+        $query = $request->get('query');
 
-        if (!$query && !$category) {
-            return response()->json([
-                'status' => 'fail',
-                'message' => 'Query or category is required for searching'
-            ], 422);
+        if (!$query) {
+            return $this->fail('Search query is required', 422);
         }
 
         try {
-            $results = $this->bookmarkService->search($query, $category);
-            return response()->json([
-                'status' => 'success',
-                'data' => $results
-            ]);
+            $results = $this->bookmarkService->searchBookmarks($query);
+
+            return $this->success($results, 'Bookmarks search results fetched successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'fail',
-                'message' => 'Search failed'
-            ], 500);
+            return $this->error('Something went wrong. Please try again later.');
         }
     }
 
-    public function share(Request $request, $id)
+    public function share(Request $request, $id): JsonResponse
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'email' => 'required|email|exists:users,email'
         ]);
 
-        $user = \App\Models\User::where('email', $request->email)->first();
-        $bookmark = Bookmark::where('id', $id)->where('user_id', auth()->id())->first();
-
-        if (!$bookmark) {
-            return response()->json(['status' => 'fail', 'message' => 'Bookmark not found'], 404);
+        if ($validator->fails()) {
+            return $this->fail('Validation failed', 422, $validator->errors());
         }
 
-        SharedBookmark::create([
-            'bookmark_id' => $bookmark->id,
-            'shared_with_user_id' => $user->id
-        ]);
+        try {
+            $message = $this->bookmarkService->shareBookmark($id, $request->email);
 
-        return response()->json(['status' => 'success', 'message' => "Bookmark shared with {$user->email}"]);
+            return $this->success(null, $message);
+        } catch (\Exception $e) {
+            return $this->error('Something went wrong. Please try again later.');
+        }
     }
 
-    public function generateShareLink($id)
+    public function generateShareLink($id): JsonResponse
     {
-        $bookmark = Bookmark::where('id', $id)->where('user_id', auth()->id())->first();
+        try {
+            $link = $this->bookmarkService->generatePublicLink($id);
 
-        if (!$bookmark) {
-            return response()->json(['status' => 'fail', 'message' => 'Bookmark not found'], 404);
+            return $this->success(['link' => $link], 'Public share link generated successfully');
+        } catch (\Exception $e) {
+            return $this->error('Something went wrong. Please try again later.');
         }
-
-        $token = Str::random(32);
-
-        SharedBookmark::create([
-            'bookmark_id' => $bookmark->id,
-            'token' => $token,
-            'expires_at' => Carbon::now()->addDays(7)
-        ]);
-
-        return response()->json([
-            'status' => 'success',
-            'link' => url("/api/shared/bookmarks/{$token}")
-        ]);
     }
 
-    public function viewShared($token)
+    public function viewShared($token): JsonResponse
     {
-        $shared = SharedBookmark::where('token', $token)
-            ->where('expires_at', '>', now())
-            ->first();
+        try {
+            $bookmark = $this->bookmarkService->getPublicBookmark($token);
 
-        if (!$shared) {
-            return response()->json(['status' => 'fail', 'message' => 'Invalid or expired link'], 404);
+            if (!$bookmark) {
+                return $this->fail('Invalid or expired link', 404);
+            }
+
+            return $this->success(new BookmarkResource($bookmark), 'Shared bookmark accessed successfully');
+        } catch (\Exception $e) {
+            return $this->error('Something went wrong. Please try again later.');
         }
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $shared->bookmark
-        ]);
     }
 
 }

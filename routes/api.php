@@ -4,11 +4,12 @@ use App\Http\Controllers\API\BookmarkController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AdminController;
 
+Route::prefix('v1')->group(function () {
 
 Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
 
-Route::middleware('auth:api')->group(function () {
+Route::middleware('auth:api', 'throttle:role_based')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('me', [AuthController::class, 'me']);
     Route::get('/bookmarks/search', [BookmarkController::class, 'search']);
@@ -34,3 +35,4 @@ Route::middleware('auth:api')->group(function () {
 
 // Unprotected route for public access
 Route::get('/shared/bookmarks/{token}', [BookmarkController::class, 'viewShared']);
+});

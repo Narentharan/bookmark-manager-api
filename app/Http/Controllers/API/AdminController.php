@@ -3,25 +3,32 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\BookmarkResource;
 use App\Models\Bookmark;
+use Illuminate\Http\Request;
+use App\Traits\ApiResponseTrait;
+use App\Services\BookmarkService;
+use Illuminate\Http\JsonResponse;
 
 class AdminController extends Controller
 {
-    public function allBookmarks()
+    protected $bookmarkService;
+    use ApiResponseTrait;
+
+    public function __construct(BookmarkService $bookmarkService)
     {
-        $bookmarks = Bookmark::with('user')->latest()->get();
+        $this->bookmarkService = $bookmarkService;
+    }
+    public function allBookmarks(Request $request): JsonResponse
+    {
+        try {
+            $perPage = $request->get('per_page', 10);
 
-        $data = $bookmarks->map(function ($bookmark) {
-            return [
-                'user' => $bookmark->user->email,
-                'title' => $bookmark->title,
-                'url' => $bookmark->url,
-                'tags' => explode(',', $bookmark->tags),
-                'category' => $bookmark->category,
-                'created_at' => $bookmark->created_at,
-            ];
-        });
+            $bookmarks = $this->bookmarkService->getAllBookmarksPaginated($perPage);
 
-        return response()->json(['status' => 'success', 'data' => $data]);
+            return $this->success(BookmarkResource::collection($bookmarks), 'All bookmarks fetched successfully');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage());
+        }
     }
 }

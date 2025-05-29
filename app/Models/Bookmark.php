@@ -23,4 +23,14 @@ class Bookmark extends Model
         return $this->hasMany(SharedBookmark::class);
     }
 
+    public function tags()
+    {
+        return $this->belongsToMany(Tag::class);
+    }
+
+    public function getTagNamesAttribute()
+    {
+        return $this->tags->pluck('name')->toArray();
+    }
+
 }
